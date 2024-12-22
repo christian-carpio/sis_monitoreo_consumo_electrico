@@ -1,0 +1,502 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": 15,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "fe6r3g67tik8wc"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "super-light-green",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 100
+              },
+              {
+                "color": "yellow",
+                "value": 233
+              },
+              {
+                "color": "semi-dark-orange",
+                "value": 350
+              },
+              {
+                "color": "dark-red",
+                "value": 466
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Longitud"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 9
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Latitud"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 9
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Consumo (kWh)"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 6,
+        "y": 0
+      },
+      "id": 1,
+      "interval": "5s",
+      "maxDataPoints": 1000,
+      "options": {
+        "basemap": {
+          "config": {
+            "server": "streets",
+            "showLabels": true,
+            "theme": "auto"
+          },
+          "name": "Layer 0",
+          "type": "osm-standard"
+        },
+        "controls": {
+          "mouseWheelZoom": true,
+          "showAttribution": true,
+          "showDebug": false,
+          "showMeasure": false,
+          "showScale": false,
+          "showZoom": true
+        },
+        "layers": [
+          {
+            "config": {
+              "showLegend": true,
+              "style": {
+                "color": {
+                  "field": "Consumo (kWh)",
+                  "fixed": "super-light-green"
+                },
+                "opacity": 0.4,
+                "rotation": {
+                  "fixed": 0,
+                  "max": 360,
+                  "min": -360,
+                  "mode": "mod"
+                },
+                "size": {
+                  "field": "consumo",
+                  "fixed": 5,
+                  "max": 15,
+                  "min": 2
+                },
+                "symbol": {
+                  "fixed": "img/icons/marker/circle.svg",
+                  "mode": "fixed"
+                },
+                "symbolAlign": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                },
+                "textConfig": {
+                  "fontSize": 12,
+                  "offsetX": 0,
+                  "offsetY": 0,
+                  "textAlign": "center",
+                  "textBaseline": "middle"
+                }
+              }
+            },
+            "location": {
+              "latitude": "lat",
+              "longitude": "lon",
+              "mode": "coords"
+            },
+            "name": "Consumos",
+            "tooltip": true,
+            "type": "markers"
+          }
+        ],
+        "tooltip": {
+          "mode": "details"
+        },
+        "view": {
+          "allLayers": true,
+          "id": "coords",
+          "lat": -1.8312,
+          "lon": -78.1834,
+          "zoom": 7
+        }
+      },
+      "pluginVersion": "11.5.0-80050",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "fe6r3g67tik8wc"
+          },
+          "query": "union(\n    tables: [\n        from(bucket: \"med_samborondon\")\n            |> range(start: -1m)\n            |> filter(fn: (r) => r._measurement == \"mediciones\" and (r._field == \"lat\" or r._field == \"lon\" or r._field == \"consumo_kwh\"))\n            |> group(columns: [\"id_medidor\", \"_field\"])\n            |> last()\n            |> pivot(rowKey: [\"_time\", \"id_medidor\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n            |> map(fn: (r) => ({\n                region: \"Samborondon\",\n                medidor: r.id_medidor,\n                lat: r.lat,\n                lon: r.lon,\n                consumo: r.consumo_kwh,\n                time: r._time\n            })),\n\n        from(bucket: \"med_daule\")\n            |> range(start: -1m)\n            |> filter(fn: (r) => r._measurement == \"mediciones\" and (r._field == \"lat\" or r._field == \"lon\" or r._field == \"consumo_kwh\"))\n            |> group(columns: [\"id_medidor\", \"_field\"])\n            |> last()\n            |> pivot(rowKey: [\"_time\", \"id_medidor\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n            |> map(fn: (r) => ({\n                region: \"Daule\",\n                medidor: r.id_medidor,\n                lat: r.lat,\n                lon: r.lon,\n                consumo: r.consumo_kwh,\n                time: r._time\n            }))\n    ]\n)\n|> keep(columns: [\"region\", \"medidor\", \"lat\", \"lon\", \"consumo\", \"time\"])\n",
+          "refId": "A"
+        }
+      ],
+      "title": "Mapa de Consumos",
+      "transformations": [
+        {
+          "id": "renameByRegex",
+          "options": {
+            "regex": ".* lat medidor_.*",
+            "renamePattern": "lat"
+          }
+        },
+        {
+          "id": "renameByRegex",
+          "options": {
+            "regex": ".* lon medidor_.*",
+            "renamePattern": "lon"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "includeByName": {},
+            "indexByName": {
+              "consumo": 1,
+              "lat": 3,
+              "lon": 2,
+              "medidor": 0,
+              "region": 4
+            },
+            "renameByName": {
+              "consumo": "Consumo (kWh)",
+              "lat": "Latitud",
+              "lon": "Longitud",
+              "medidor": "# Medidor",
+              "region": "Region"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "includeByName": {},
+            "indexByName": {},
+            "renameByName": {
+              "time": "TimeStamp"
+            }
+          }
+        }
+      ],
+      "type": "geomap"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "fe6r3g67tik8wc"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "dark-yellow",
+            "mode": "shades"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisGridShow": false,
+            "axisLabel": "Consumo promedio (kWh)",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 36,
+            "gradientMode": "hue",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineStyle": {
+              "fill": "solid"
+            },
+            "lineWidth": 2,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 3,
+          "fieldMinMax": false,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "semi-dark-purple",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "promedio_consumo samborondon"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Consumo promedio por minutos"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 2,
+      "maxDataPoints": 10000,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "timezone": [
+          "browser"
+        ],
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.5.0-80050",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "fe6r3g67tik8wc"
+          },
+          "query": "from(bucket: \"med_samborondon\")\n  |> range(start: -1h) // Últimas 24 horas\n  |> filter(fn: (r) => r._measurement == \"mediciones\" and r._field == \"consumo_kwh\")\n  |> aggregateWindow(every: 1m, fn: mean, createEmpty: false) \n  |> group(columns: [\"region\"]) \n  |> keep(columns: [\"_time\", \"region\", \"_value\"]) \n  |> rename(columns: {_value: \"promedio_consumo\"}) \n\n\n\n",
+          "refId": "A"
+        }
+      ],
+      "title": "Consumo Promedio en Samborondon",
+      "transparent": true,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "fe6r3g67tik8wc"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "dark-blue",
+            "mode": "shades"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisGridShow": false,
+            "axisLabel": "Consumo promedio (kWh)",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 36,
+            "gradientMode": "hue",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineStyle": {
+              "fill": "solid"
+            },
+            "lineWidth": 2,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 3,
+          "fieldMinMax": false,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "semi-dark-purple",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "promedio_consumo daule"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Consumo promedio por minutos"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 3,
+      "maxDataPoints": 10000,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "timezone": [
+          "browser"
+        ],
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.5.0-80050",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "fe6r3g67tik8wc"
+          },
+          "query": "from(bucket: \"med_daule\")\n  |> range(start: -1h) \n  |> filter(fn: (r) => r._measurement == \"mediciones\" and r._field == \"consumo_kwh\")\n  |> aggregateWindow(every: 1m, fn: mean, createEmpty: false) \n  |> group(columns: [\"region\"]) \n  |> keep(columns: [\"_time\", \"region\", \"_value\"]) \n  |> rename(columns: {_value: \"promedio_consumo\"}) \n\n\n",
+          "refId": "A"
+        }
+      ],
+      "title": "Consumo Promedio en Daule",
+      "transparent": true,
+      "type": "timeseries"
+    }
+  ],
+  "preload": false,
+  "refresh": "5s",
+  "schemaVersion": 40,
+  "tags": [],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Mapa",
+  "uid": "be6t6dk2rp3b4c",
+  "version": 22,
+  "weekStart": ""
+}

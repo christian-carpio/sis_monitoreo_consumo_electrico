@@ -1,0 +1,135 @@
+# Proyecto PMD - Segundo Parcial
+# Realizado por Christian Carpio y Ana Cristina Palacios
+
+# El siguiente sistema emplea:
+ - Apache Kafka
+ - Apache Spark 
+ - Apache Hadoop
+ - Influxdb
+ - ngrok
+ - Grafana Cloud
+ - Python 3
+
+# Instrucciones para usar el sistema
+
+# Paso 1: Habilitar Kafka (Desde el directorio donde tenga la instalacion)
+ - ./bin/zookeeper-server-start.sh ./config/zookeeper.properties  (Activar Zookeper)
+ - ./bin/kafka-server-start.sh ./config/server.properties (Activar Server)
+ - ./bin/kafka-topics.sh --create --bootstrap-server localhost:9092 --replication-factor 1 --partitions 1 --topic mediciones_samborodon 
+ - ./bin/kafka-topics.sh --create --bootstrap-server localhost:9092 --replication-factor 1 --partitions 1 --topic mediciones_daule (Crean Topics que recibiran las mediciones)
+ - ./bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic mediciones_samborondon --from-beginning
+ - ./bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic mediciones_daule --from-beginning (Para consultar si el envio de datos es el correcto)
+
+# Paso 2: Generar mediciones (Realizar desde la raiz)
+ - python Desktop/Proyecto\ PMD/generar_data_kafka.py
+
+# Paso 3: Habilitar Influxdb (Desde cualquier directorio):
+ - brew services start Influxdb
+ - Crear 2 buckets, med_samborondon y med_daule
+ - Crear Token de autenticacion
+ - Configurar token en el script kafka_influx_connect.py
+
+# Paso 4: Enviar datos desde kafka hasta influxdb (Realizar desde la raiz)
+ - python Desktop/Proyecto\ PMD/kafka_influx_connect.py
+ - Usar la consulta Flux 4 para revisar como se almacenan los datos (Opcional)
+
+# Paso 4: Habilitar conexion entre maquina local y Grafana Cloud (Desde cualquier directorio)
+ - ngrok http 8086 (Habilitar el puerto para conexiones externas)
+ - Copiar url generada y pegarla en Grafana Cloud (data sources > influxdb)
+ - Revisar conexion
+
+# Paso 5 : Configurar Grafana Cloud
+ - Crear un dashboard
+ - Agregar un GeoMap y escoger influxdb como data sources
+ - Usar la consulta Flux 1 para generar los datos esperados
+ - Agregar 2 Time Chart, uno para samborondon y otro para med_daule
+ - Usar las consultas Flux 2 y 3 respectivamente
+ 
+# Paso 6: Habilitar Spark (Desde el directorio donde tenga la instalacion ) 
+ - ./sbin/start-master.sh
+ - ./sbin/start-worker.sh spark://MacBook-Pro-de-Christian.local:7077
+
+# Paso 7: Habilitar HDFS (Desde cualquier directorio)
+ - ssh localhost
+ - start-all.sh (Habilita todo lo relacionado con Hadoop)
+ - jps (Si quiere revisar que este funcionando correctamente)
+ - hdfs dfs -mkdir /samborondon
+ - hdfs dfs -mkdir /daule
+ - hdfs dfs -mkdir /atipicios (Creacion de directorios donde se guardaran los promedios)
+
+# Paso 8: Procesar y Almacenar consumos promedio en HDFS (Realizar dentro del directorio de Spark)
+ - export PYSPARK_PYTHON=/usr/bin/python3                
+ - export PYSPARK_DRIVER_PYTHON=/usr/bin/python3 (Exportar variables de entorno)
+ - yarn application -list (Revisar las aplicaciones que se estan ejecutando)
+ - yarn application -kill <application_id> (Eliminar aplicaciones que interfieran con el despliegue deseado)
+
+ - ./bin/spark-submit \
+    --master yarn \
+    --conf spark.yarn.appMasterEnv.PYSPARK_PYTHON=/usr/bin/python3 \
+    --conf spark.executorEnv.PYSPARK_PYTHON=/usr/bin/python3 \
+    --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1 \
+    /Users/christiancarpio/Desktop/Proyecto\ PMD/proceso_datos.py
+
+Consulta Flux 1
+union(
+    tables: [
+        from(bucket: "med_samborondon")
+            |> range(start: -1m)
+            |> filter(fn: (r) => r._measurement == "mediciones" and (r._field == "lat" or r._field == "lon" or r._field == "consumo_kwh"))
+            |> group(columns: ["id_medidor", "_field"])
+            |> last()
+            |> pivot(rowKey: ["_time", "id_medidor"], columnKey: ["_field"], valueColumn: "_value")
+            |> map(fn: (r) => ({
+                region: "Samborondon",
+                medidor: r.id_medidor,
+                lat: r.lat,
+                lon: r.lon,
+                consumo: r.consumo_kwh,
+                time: r._time
+            })),
+
+        from(bucket: "med_daule")
+            |> range(start: -1m)
+            |> filter(fn: (r) => r._measurement == "mediciones" and (r._field == "lat" or r._field == "lon" or r._field == "consumo_kwh"))
+            |> group(columns: ["id_medidor", "_field"])
+            |> last()
+            |> pivot(rowKey: ["_time", "id_medidor"], columnKey: ["_field"], valueColumn: "_value")
+            |> map(fn: (r) => ({
+                region: "Daule",
+                medidor: r.id_medidor,
+                lat: r.lat,
+                lon: r.lon,
+                consumo: r.consumo_kwh,
+                time: r._time
+            }))
+    ]
+)
+|> keep(columns: ["region", "medidor", "lat", "lon", "consumo", "time"])
+
+
+Consulta Flux 2
+from(bucket: "med_samborondon")
+  |> range(start: -1h)
+  |> filter(fn: (r) => r._measurement == "mediciones" and r._field == "consumo_kwh")
+  |> aggregateWindow(every: 1m, fn: mean, createEmpty: false) 
+  |> group(columns: ["region"])
+  |> keep(columns: ["_time", "region", "_value"]) 
+  |> rename(columns: {_value: "promedio_consumo"})
+
+
+
+Consulta Flux 3
+from(bucket: "med_daule")
+  |> range(start: -1h) 
+  |> filter(fn: (r) => r._measurement == "mediciones" and r._field == "consumo_kwh")
+  |> aggregateWindow(every: 1m, fn: mean, createEmpty: false)
+  |> group(columns: ["region"]) 
+  |> keep(columns: ["_time", "region", "_value"])
+  |> rename(columns: {_value: "promedio_consumo"}) 
+
+
+Consulta Flux 4 
+from(bucket: "med_samborondon")
+|> range(start: -1h)
+|> filter(fn: (r) => r._measurement == "mediciones")
+|> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
